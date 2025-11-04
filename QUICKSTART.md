@@ -1,214 +1,341 @@
 # 快速开始指南
 
-## 环境激活
+5分钟快速启动UAV多源决策系统。
 
-每次使用前，执行：
+---
+
+## 📋 前置要求
+
+- Ubuntu 20.04/22.04
+- ROS2 Humble
+- Conda (Python 3.10)
+
+---
+
+## ⚡ 快速启动（3步）
+
+### 步骤1：环境配置（一次性）
 
 ```bash
-cd /home/lihaomin/project/uav_sys
-source setup_env.sh
-```
+# 克隆项目
+cd ~/project
+git clone <repo_url> uav_sys
+cd uav_sys
 
-或手动执行：
-
-```bash
+# 创建conda环境
+conda create -n uav_sys python=3.10 -y
 conda activate uav_sys
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 编译ROS2包
 source /opt/ros/humble/setup.zsh
-source install/setup.zsh
+colcon build --symlink-install
 ```
 
-## 快速测试
-
-### 1. 启动完整系统
-
-在终端1中启动所有核心节点：
+### 步骤2：启动系统
 
 ```bash
+# 使用便捷脚本（自动source环境）
+source setup_env.sh
+
+# 方式A：单机模式
 ros2 launch uav_decision_arbiter system.launch.py
+
+# 方式B：多机模式（推荐）
+ros2 launch uav_decision_arbiter multi_uav.launch.py
 ```
 
-### 2. 启动监控
-
-在终端2中启动监控器：
+### 步骤3：验证运行
 
 ```bash
+# 新终端：启动监控
+python3 examples/monitor.py
+
+# 应该看到：
+# ✓ 仲裁器在线
+# ✓ 同步器在线
+# ✓ 3个适配器在线
+```
+
+---
+
+## 🎮 完整演示
+
+### 演示1：RL平台可视化
+
+```bash
+# 终端1：系统
+ros2 launch uav_decision_arbiter multi_uav.launch.py
+
+# 终端2：RL平台
+python3 rl_platform/rl_platform_node.py
+
+# 效果：Pygame窗口显示3架无人机飞行
+```
+
+### 演示2：Gazebo 3D仿真
+
+```bash
+# 一键启动（Gazebo + 系统 + RL）
+./run_full_system.sh
+
+# 效果：
+# - Gazebo窗口：3D无人机模型
+# - Pygame窗口：2D轨迹
+# - 终端：系统日志
+```
+
+### 演示3：AirSim集成
+
+```bash
+# 1. 配置AirSim（一次性）
+pip install airsim
+cp airsim_config/settings.json ~/Documents/AirSim/
+# 编辑 config/multi_uav.yaml: use_airsim_api: true
+
+# 2. 启动AirSim（虚幻引擎）
+
+# 3. 启动系统
+ros2 launch uav_decision_arbiter multi_uav.launch.py
+
+# 4. 启动中央算力
+python3 examples/central_planner_airsim.py
+
+# 效果：AirSim中无人机按waypoints飞行
+```
+
+---
+
+## 📊 快速参考
+
+### 常用命令
+
+```bash
+# 环境激活
+source setup_env.sh
+
+# 启动系统
+ros2 launch uav_decision_arbiter multi_uav.launch.py
+
+# 监控状态
+python3 examples/monitor.py
+
+# RL平台
+python3 rl_platform/rl_platform_node.py
+
+# Gazebo仿真
+./gazebo_sim/start_gazebo_sim.sh
+
+# 完整演示
+./run_full_system.sh
+```
+
+### 重要话题
+
+| 话题 | 说明 |
+|------|------|
+| `/uav/arbiter/status` | 仲裁器状态 |
+| `/uav/authoritative_cmd` | 当前生效命令 |
+| `/{uav_id}/rl/decision_output` | RL决策输出 |
+| `/{uav_id}/central/decision_output` | 中央算力决策 |
+| `/uav/formation_sync` | 编队同步 |
+
+### 配置文件
+
+| 文件 | 用途 |
+|------|------|
+| `config/default.yaml` | 单机配置 |
+| `config/multi_uav.yaml` | 多机配置 |
+| `airsim_config/settings.json` | AirSim配置 |
+
+### 优先级设置
+
+| 决策源 | 优先级 | 用途 |
+|--------|--------|------|
+| Human | 200 | 紧急接管 |
+| Central | 150 | 中央算力 |
+| RL | 100 | 自主决策 |
+
+---
+
+## 🧪 测试工具
+
+```bash
+# RL决策测试
+python3 examples/test_rl_publisher.py
+
+# 中央算力测试
+python3 examples/test_central_publisher.py
+
+# 多机PX4测试
+python3 examples/mock_multi_px4.py
+
+# AirSim连接测试
+./test_airsim_integration.sh
+```
+
+---
+
+## 🎯 使用场景
+
+### 场景1：只运行仲裁系统
+
+```bash
+ros2 launch uav_decision_arbiter multi_uav.launch.py
 python3 examples/monitor.py
 ```
 
-### 3. 测试RL控制
-
-在终端3中启动RL测试发布器：
+### 场景2：系统 + RL可视化
 
 ```bash
-python3 examples/test_rl_publisher.py
+# 终端1
+ros2 launch uav_decision_arbiter multi_uav.launch.py
+
+# 终端2
+python3 rl_platform/rl_platform_node.py
 ```
 
-观察监控器输出，应该看到：
-- 当前生效源：`rl`
-- 权威命令显示速度控制
-
-### 4. 测试优先级抢占
-
-在终端4中启动中央算力测试发布器：
+### 场景3：完整仿真（推荐）
 
 ```bash
-python3 examples/test_central_publisher.py
+./run_full_system.sh
 ```
 
-观察监控器，应该看到：
-- 当前生效源从 `rl` 切换到 `central`
-- 权威命令变为位置控制
-
-### 5. 测试回退
-
-按 `Ctrl+C` 停止中央算力发布器，观察监控器：
-- 系统自动回退到 `rl` 源
-
-## 常用命令
-
-### 查看系统状态
+### 场景4：AirSim对接
 
 ```bash
-# 查看所有节点
-ros2 node list
-
-# 查看所有话题
-ros2 topic list
-
-# 查看仲裁器状态
-ros2 topic echo /uav/arbiter/status
-
-# 查看权威命令
-ros2 topic echo /uav/authoritative_cmd
+# 1. 启动AirSim
+# 2. 配置：config/multi_uav.yaml (use_airsim_api: true)
+ros2 launch uav_decision_arbiter multi_uav.launch.py
+python3 examples/central_planner_airsim.py
 ```
 
-### 手动发布测试命令
+---
+
+## 🔧 常见问题
+
+### 问题1：环境变量未设置
 
 ```bash
-# 发布RL决策（速度控制）
-ros2 topic pub /rl/decision_output std_msgs/msg/String \
-  'data: "{\"action\": [1.0, 0.5, 0.2, 0.1]}"'
-
-# 发布中央决策（位置控制）
-ros2 topic pub /central/decision_output std_msgs/msg/String \
-  'data: "{\"type\": \"position\", \"position\": {\"x\": 5.0, \"y\": 3.0, \"z\": 2.0, \"yaw\": 0.0}}"'
+# 解决：使用便捷脚本
+source setup_env.sh
 ```
 
-## 项目结构
-
-```
-uav_sys/
-├── src/
-│   └── uav_decision_arbiter/          # ROS2包
-│       ├── uav_decision_arbiter/       # Python模块
-│       │   ├── command_msg.py         # 统一消息格式
-│       │   ├── arbiter_node.py        # 仲裁器
-│       │   ├── synchronizer_node.py   # 同步器
-│       │   ├── rl_adapter.py          # RL适配器
-│       │   ├── airsim_adapter.py      # AirSim适配器
-│       │   └── px4_adapter.py         # PX4适配器
-│       ├── config/                    # 配置文件
-│       ├── launch/                    # 启动文件
-│       ├── package.xml
-│       └── setup.py
-├── examples/                          # 测试示例
-│   ├── test_rl_publisher.py
-│   ├── test_central_publisher.py
-│   ├── monitor.py
-│   └── README.md
-├── README.md                          # 完整文档
-├── QUICKSTART.md                      # 本文件
-├── setup_env.sh                       # 环境设置脚本
-└── requirements.txt                   # Python依赖
-```
-
-## 配置修改
-
-配置文件位置：`src/uav_decision_arbiter/config/default.yaml`
-
-修改后需要重新编译：
+### 问题2：rclpy导入失败
 
 ```bash
-colcon build --symlink-install
-source install/setup.zsh
+# 解决：检查libstdc++
+conda install -c conda-forge libstdcxx-ng
 ```
 
-## 连接实际平台
-
-### 连接AirSim
-
-1. 确保AirSim正在运行
-2. 修改配置文件 `config/default.yaml`：
-   ```yaml
-   airsim_adapter:
-     use_airsim_api: true
-     airsim_ip: "127.0.0.1"  # AirSim地址
-   ```
-3. 安装AirSim Python包：
-   ```bash
-   pip install airsim
-   ```
-
-### 连接PX4
-
-1. 启动PX4 SITL或连接真实飞控
-2. 启动MAVROS：
-   ```bash
-   ros2 run mavros mavros_node --ros-args \
-     -p fcu_url:="udp://:14540@127.0.0.1:14557"
-   ```
-3. 确保配置文件中 `px4_adapter.use_mavros: true`
-
-### 连接RL平台
-
-您的RL平台需要：
-1. 发布决策到话题 `/rl/decision_output`
-2. 订阅可视化命令从 `/rl/visualization_cmd`
-3. （可选）发布状态到 `/rl/state_feedback`
-
-消息格式参考：`examples/test_rl_publisher.py`
-
-## 故障排除
-
-### 编译失败
+### 问题3：colcon build失败
 
 ```bash
-# 清理后重新编译
-rm -rf build/ install/ log/
+# 解决：清理后重新编译
+rm -rf build install log
 colcon build --symlink-install
 ```
 
-### ROS2环境未找到
+### 问题4：节点无法通信
 
 ```bash
-# 确认ROS2安装
-ls /opt/ros/
+# 检查：ROS_DOMAIN_ID
+echo $ROS_DOMAIN_ID  # 应该相同（默认0）
 
-# 如果是其他版本（如foxy），修改setup_env.sh中的ROS_DISTRO
+# 检查：ROS2守护进程
+ros2 daemon stop
+ros2 daemon start
 ```
 
-### Conda环境问题
+**更多故障排除**：`TROUBLESHOOTING.md`
 
-```bash
-# 重新创建环境
-conda deactivate
-conda remove -n uav_sys --all
-conda create -n uav_sys python=3.10 -y
-conda activate uav_sys
-pip install -r requirements.txt
-```
+---
 
-## 下一步
+## 📖 详细文档
 
-- 阅读完整文档：`README.md`
-- 查看测试示例：`examples/README.md`
-- 根据需求修改配置：`src/uav_decision_arbiter/config/default.yaml`
-- 集成您的RL平台、AirSim和PX4
+| 文档 | 说明 |
+|------|------|
+| **README.md** | 系统概述和架构 |
+| **FEATURES.md** | 功能详细说明 |
+| **MULTI_UAV_GUIDE.md** | 多机开发指南 |
+| **AIRSIM_INTEGRATION.md** | AirSim对接 |
+| **GAZEBO_QUICKSTART.md** | Gazebo仿真 |
+| **RL_PLATFORM_GUIDE.md** | RL平台开发 |
+| **TROUBLESHOOTING.md** | 故障排除 |
 
-## 技术支持
+---
 
-如有问题，请检查：
-1. ROS2话题是否正常：`ros2 topic list`
-2. 节点是否运行：`ros2 node list`
-3. 日志输出中的错误信息
+## 🎓 学习路径
 
+### 新手路径（30分钟）
+
+1. **快速启动**（5分钟）
+   ```bash
+   source setup_env.sh
+   ros2 launch uav_decision_arbiter multi_uav.launch.py
+   python3 examples/monitor.py
+   ```
+
+2. **运行演示**（10分钟）
+   ```bash
+   # 启动RL可视化
+   python3 rl_platform/rl_platform_node.py
+   ```
+
+3. **测试决策**（10分钟）
+   ```bash
+   # 发布RL决策
+   python3 examples/test_rl_publisher.py
+   
+   # 发布中央决策
+   python3 examples/test_central_publisher.py
+   ```
+
+4. **阅读文档**（5分钟）
+   - README.md - 系统概述
+   - FEATURES.md - 功能说明
+
+### 进阶路径（2小时）
+
+1. **多机编队**（30分钟）
+   - 阅读：MULTI_UAV_GUIDE.md
+   - 测试：`python3 examples/mock_multi_px4.py`
+
+2. **Gazebo仿真**（30分钟）
+   - 阅读：GAZEBO_QUICKSTART.md
+   - 启动：`./run_full_system.sh`
+
+3. **AirSim集成**（30分钟）
+   - 阅读：AIRSIM_INTEGRATION.md
+   - 测试：`./test_airsim_integration.sh`
+
+4. **RL开发**（30分钟）
+   - 阅读：RL_PLATFORM_GUIDE.md
+   - 修改：`rl_platform/rl_policy.py`
+
+### 开发路径（1天）
+
+1. 自定义决策源
+2. 修改仲裁逻辑
+3. 添加新功能
+4. 扩展到更多无人机
+
+**开发文档**：README.md - 开发指南部分
+
+---
+
+## 🚀 下一步
+
+- **基础使用** → 阅读 `FEATURES.md`
+- **多机开发** → 阅读 `MULTI_UAV_GUIDE.md`
+- **3D仿真** → 运行 `./run_full_system.sh`
+- **AirSim对接** → 阅读 `AIRSIM_INTEGRATION.md`
+- **RL开发** → 阅读 `RL_PLATFORM_GUIDE.md`
+
+**遇到问题？** 查看 `TROUBLESHOOTING.md`
+
+---
+
+**开始你的UAV开发之旅！** 🎉

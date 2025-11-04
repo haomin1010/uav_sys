@@ -2,6 +2,21 @@
 
 一个用于无人机控制的多源决策融合平台，支持RL决策、中央算力（AirSim）和人类控制三种决策源的智能仲裁与轨迹同步。
 
+## 📚 快速导航
+
+**新手必看**：[QUICKSTART.md](QUICKSTART.md) - 5分钟快速启动  
+**文档索引**：[DOCS_INDEX.md](DOCS_INDEX.md) - 所有文档导航  
+**功能说明**：[FEATURES.md](FEATURES.md) - 详细功能介绍  
+**故障排除**：[TROUBLESHOOTING.md](TROUBLESHOOTING.md) - 问题解决
+
+**专题文档**：
+- 多机开发 → [MULTI_UAV_GUIDE.md](MULTI_UAV_GUIDE.md)
+- AirSim对接 → [AIRSIM_INTEGRATION.md](AIRSIM_INTEGRATION.md)
+- Gazebo仿真 → [GAZEBO_QUICKSTART.md](GAZEBO_QUICKSTART.md)
+- RL平台 → [RL_PLATFORM_GUIDE.md](RL_PLATFORM_GUIDE.md)
+
+---
+
 ## 系统架构
 
 ### 工作模式
@@ -312,7 +327,7 @@ ros2 bag record -a
 ros2 launch uav_decision_arbiter system.launch.py
 ```
 
-**详细文档**：`INITIAL_POSITION_SYNC.md`
+**详细文档**：`FEATURES.md` - 初始位置同步
 
 **主要特性**：
 - ✅ 启动时自动从PX4读取位置
@@ -334,7 +349,7 @@ ros2 launch uav_decision_arbiter multi_uav.launch.py
 python3 examples/mock_multi_px4.py
 ```
 
-**详细文档**：`FORMATION_SYNC.md` 和 `MULTI_UAV_GUIDE.md`
+**详细文档**：`FEATURES.md` - 编队同步 | `MULTI_UAV_GUIDE.md`
 
 **主要特性**：
 - ✅ 集中仲裁架构（一个Arbiter管理多机）
@@ -348,7 +363,7 @@ python3 examples/mock_multi_px4.py
 
 支持一个中心仲裁器同时管理多架无人机的决策。
 
-**详细文档**：`CENTRALIZED_ARCHITECTURE.md`
+**详细文档**：`FEATURES.md` - 集中仲裁架构
 
 **主要特性**：
 - ✅ 统一决策协调
@@ -394,6 +409,38 @@ python3 rl_platform/rl_platform_node.py
 - ✅ ROS2完整集成（发送决策/接收同步）
 - ✅ 交互控制（暂停/重置/退出）
 - ✅ 易于替换为神经网络策略
+
+### 6. AirSim集成⭐⭐完全对接
+
+AirSim Adapter已完整实现，**代码100%完成，只需3步配置**即可对接。
+
+**快速开始**：
+```bash
+# 1. 安装
+pip install airsim
+
+# 2. 配置
+cp airsim_config/settings.json ~/Documents/AirSim/
+
+# 3. 启用（编辑config/multi_uav.yaml）
+#    use_airsim_api: true
+
+# 4. 测试
+./test_airsim_integration.sh
+
+# 5. 运行
+ros2 launch uav_decision_arbiter multi_uav.launch.py
+python3 examples/central_planner_airsim.py
+```
+
+**详细文档**：`AIRSIM_INTEGRATION.md`
+
+**核心特性**：
+- ✅ 上游：只需发布ROS2消息到 `/{uav_id}/central/decision_output`
+- ✅ 下游：Adapter自动调用AirSim API
+- ✅ 支持位置/速度/轨迹控制
+- ✅ 自动编队同步
+- ✅ 多机独立控制
 
 ## 许可证
 
