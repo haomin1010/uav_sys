@@ -1,0 +1,14 @@
+# Python依赖包
+# ROS2相关依赖通过apt/conda安装，这里列出额外的Python包
+
+# 核心依赖
+numpy>=1.21.0
+
+# RL平台依赖
+pygame>=2.1.0          # 可视化界面
+
+# 可选依赖
+# airsim                # AirSim支持（如需连接实际AirSim）
+# torch>=1.10.0         # 如需使用神经网络策略
+# stable-baselines3     # 如需训练RL模型
+

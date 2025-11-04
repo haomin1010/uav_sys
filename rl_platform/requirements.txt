@@ -1,0 +1,5 @@
+# RL平台Python依赖
+
+numpy>=1.21.0
+pygame>=2.1.0
+

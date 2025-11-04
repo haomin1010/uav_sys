@@ -1,0 +1,32 @@
+# ROS2相关
+build/
+install/
+log/
+*.bag
+*.db3
+
+# Python相关
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+dist/
+
+# IDE相关
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Conda相关
+.conda/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+

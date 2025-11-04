@@ -1,0 +1,41 @@
+# 无人机多源决策系统默认配置
+# ROS2参数文件格式要求：节点名 -> ros__parameters -> 参数
+
+# 仲裁器配置
+arbiter:
+  ros__parameters:
+    centralized_mode: true           # 集中仲裁模式（true=多机, false=单机）
+    uav_ids: ["uav1", "uav2", "uav3"]  # 管理的无人机ID列表
+    hysteresis_ms: 200               # 防抖窗口（毫秒）
+    heartbeat_timeout: 2.0           # 心跳超时（秒）
+
+# 同步器配置
+synchronizer:
+  ros__parameters:
+    publish_rate: 20.0          # 发布频率（Hz）
+
+# RL适配器配置
+rl_adapter:
+  ros__parameters:
+    command_timeout: 0.5        # 命令有效期（秒）
+    rl_input_format: "velocity" # RL输出格式：velocity/position
+    sync_initial_position: true # 是否同步初始位置
+
+# AirSim适配器配置
+airsim_adapter:
+  ros__parameters:
+    command_timeout: 1.0        # 命令有效期（秒）
+    use_airsim_api: false       # 是否实际连接AirSim（开发时可设为false）
+    airsim_ip: "127.0.0.1"      # AirSim IP地址
+    vehicle_name: "Drone1"      # 飞机名称
+    sync_initial_position: true # 是否同步初始位置
+
+# PX4适配器配置
+px4_adapter:
+  ros__parameters:
+    command_timeout: 0.5        # 命令有效期（秒）
+    human_control_threshold: 0.1 # 检测人类控制的阈值
+    use_mavros: true            # 是否使用MAVROS
+    publish_initial_position: true  # 是否发布初始位置
+    initial_position_delay: 2.0 # 等待MAVROS数据的延迟（秒）
+

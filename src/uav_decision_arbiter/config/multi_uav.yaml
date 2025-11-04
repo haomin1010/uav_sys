@@ -1,0 +1,112 @@
+# 多机编队配置文件
+# 用于集中仲裁架构和编队位置同步
+
+# 仲裁器配置（集中管理）
+arbiter:
+  ros__parameters:
+    centralized_mode: true                  # 集中仲裁模式
+    uav_ids: ["uav1", "uav2", "uav3"]      # 管理的无人机列表
+    hysteresis_ms: 200
+    heartbeat_timeout: 2.0
+
+# 同步器配置
+synchronizer:
+  ros__parameters:
+    publish_rate: 20.0
+
+# 编队位置同步管理器
+formation_sync:
+  ros__parameters:
+    uav_ids: ["uav1", "uav2", "uav3"]
+    leader_uav: "uav1"                      # 编队长机
+    sync_on_startup: true
+    startup_delay: 3.0                      # 等待所有PX4数据
+    
+    # 编队标准队形（NED坐标系，相对于长机）
+    formation_offsets:
+      uav1: {x: 0.0, y: 0.0, z: 0.0}       # 长机位于编队中心
+      uav2: {x: 0.0, y: -5.0, z: 0.0}      # 右翼5米（东边）
+      uav3: {x: 0.0, y: 5.0, z: 0.0}       # 左翼5米（西边）
+    
+    # AirSim中的生成位置（NED坐标系，全局）
+    # 这些是AirSim世界中无人机的初始spawn点
+    airsim_spawn_offsets:
+      uav1: {x: 0.0, y: 0.0, z: 0.0}       # AirSim世界原点
+      uav2: {x: 0.0, y: -10.0, z: 0.0}     # 东边10米
+      uav3: {x: 0.0, y: 10.0, z: 0.0}      # 西边10米
+
+# UAV1的适配器配置
+uav1_rl_adapter:
+  ros__parameters:
+    command_timeout: 0.5
+    rl_input_format: "velocity"
+    sync_initial_position: true
+    uav_id: "uav1"
+
+uav1_airsim_adapter:
+  ros__parameters:
+    command_timeout: 1.0
+    use_airsim_api: false
+    airsim_ip: "127.0.0.1"
+    vehicle_name: "Drone1"
+    sync_initial_position: true
+    uav_id: "uav1"
+
+uav1_px4_adapter:
+  ros__parameters:
+    command_timeout: 0.5
+    human_control_threshold: 0.1
+    use_mavros: true
+    publish_initial_position: false  # 由formation_sync统一管理
+    uav_id: "uav1"
+
+# UAV2的适配器配置
+uav2_rl_adapter:
+  ros__parameters:
+    command_timeout: 0.5
+    rl_input_format: "velocity"
+    sync_initial_position: true
+    uav_id: "uav2"
+
+uav2_airsim_adapter:
+  ros__parameters:
+    command_timeout: 1.0
+    use_airsim_api: false
+    airsim_ip: "127.0.0.1"
+    vehicle_name: "Drone2"
+    sync_initial_position: true
+    uav_id: "uav2"
+
+uav2_px4_adapter:
+  ros__parameters:
+    command_timeout: 0.5
+    human_control_threshold: 0.1
+    use_mavros: true
+    publish_initial_position: false
+    uav_id: "uav2"
+
+# UAV3的适配器配置
+uav3_rl_adapter:
+  ros__parameters:
+    command_timeout: 0.5
+    rl_input_format: "velocity"
+    sync_initial_position: true
+    uav_id: "uav3"
+
+uav3_airsim_adapter:
+  ros__parameters:
+    command_timeout: 1.0
+    use_airsim_api: false
+    airsim_ip: "127.0.0.1"
+    vehicle_name: "Drone3"
+    sync_initial_position: true
+    uav_id: "uav3"
+
+uav3_px4_adapter:
+  ros__parameters:
+    command_timeout: 0.5
+    human_control_threshold: 0.1
+    use_mavros: true
+    publish_initial_position: false
+    uav_id: "uav3"
+

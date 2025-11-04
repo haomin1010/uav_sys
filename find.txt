@@ -1,0 +1,273 @@
+我想搭建一个平台，这个平台控制无人机运动的信号有：通过RL做出的决策，通过外部中心算力传入的决策，通过真人传入的决策。这三种信号有优先级，高优的会抢占低优的。 然后我还希望三个平台融合。一个是我现有的RL决策平台，他带有一个小小的展示界面。第二个是一个虚幻引擎上的airsim平台，他负责外部中心算力指定决策（怎么制定先不管），另一个就是真实的无人机PX4飞控，这个可能会收到人的控制信号。 我希望他们三者在运动轨迹上同步。如果有一个信息源对应的平台在当下负责决策，就把信号同传给另外两个。 请我帮简单设计一下这个平台的代码架构。
+
+很好 — 我会给你一套清晰、可落地的代码架构设计（包含模块划分、消息格式、仲裁逻辑、同步策略与示例伪码/接口），让你能把三套决策源（RL 平台 / 中央算力 via AirSim / 人类 via PX4 遥控）统一纳入一个“决策仲裁与同步层”，并在三个平台之间做实时转发与轨迹同步。
+我默认优先级为：人类 > 中央算力（外部） > RL（若你有别的偏好可直接替换）。下面按模块、数据流和关键实现细节给出设计与示例代码片段。
+
+1. 总体架构（高层）
+
+架构分为六大模块（可分布式部署）：
+
+Decision Sources（决策源）
+
+RL 平台（已有展示界面）—— 输出：trajectory / control commands
+
+AirSim（代表中央算力下发决策）—— 接收/发出同样的命令接口
+
+人类（真实 PX4 飞控 / RC or Ground Station）—— 人传入控制
+
+Arbiter（决策仲裁器）
+
+接收三路命令，根据优先级和时序决定“当前生效源”
+
+对外发布“current authoritative command”
+
+Bridge / Adapters（协议适配层）
+
+RL Adapter、AirSim Adapter、PX4 Adapter：把各平台的本地格式桥接成统一消息（和反向桥接）
+
+Synchronizer（轨迹同步器 / Forwarder）
+
+把“仲裁后的命令”转发给其它两端（使三端在轨迹上同步）
+
+做差值/插值保证平滑（若必要，做轨迹跟踪）
+
+State & Telemetry（状态与心跳）
+
+所有节点上报状态（position, velocity, timestamp, source_id, health）
+
+心跳检测与超时切换
+
+UI / Monitor
+
+显示当前生效源、优先级、轨迹、延迟、报警
+
+通信选型（建议）：
+
+ROS 2 (DDS)：若你用 ROS 生态，ROS2 自带可靠 QoS、发现机制，适合低延迟、多主机。AirSim/ PX4/ RL 都能接入（mavros/mavsdk 与 ROS 2 bridge）。
+
+ZeroMQ / MQTT：若想轻量，可用消息中间件；但需要自己实现发现/心跳/优先级。
+我接下来示例以 ROS 2 (Python) 为主（概念同样可映射到 ZeroMQ）。
+
+2. 关键数据结构（统一消息格式）
+
+建议使用统一的 CommandMsg（JSON / ROS msg）：
+
+CommandMsg:
+  header:
+    timestamp: float64  # UNIX epoch seconds (高精度)
+    source_id: string   # "human", "central", "rl"
+    seq: uint32
+  meta:
+    priority: uint8     # 0..255, 数值越大优先级越高
+    mode: string        # "trajectory" | "velocity" | "attitude" | "position"
+    expires_at: float64 # 暂时有效到时间戳（防止滞后命令）
+  body:
+    # 如果 mode == "trajectory"：
+    trajectory:
+      - {t_offset: float, x: float, y: float, z: float, yaw: float}
+    # 如果 mode == "velocity":
+    velocity: {vx, vy, vz, yaw_rate}
+    # 如果 mode == "setpoint":
+    setpoint: {x,y,z,yaw}
+
+
+优先级建议映射（仅示范）：
+
+human: 200
+
+central: 150
+
+rl: 100
+
+3. 仲裁器（核心逻辑）
+
+仲裁器要做三件事：
+
+接收并缓存来自各源的最新命令（带时间戳与过期时间）。
+
+按优先级+新鲜度选取“当前生效源”（preemption）。
+
+广播/转发生效命令给所有 Adapter（包括产生该命令的源，以便回环校验）。
+
+主要规则（示例）：
+
+如果高优先级源命令到达且未过期 -> 立即抢占（preempt）低优先级源。
+
+如果当前最高优先级源失联（超过心跳或命令过期） -> 回退到下一个可用源。
+
+可配置“抑制窗口”：短时间（如 200ms）内不允许频繁切换，防抖。
+
+下面给出 Python 风格伪码（基于 ROS2 回路）：
+
+# Arbiter simplified pseudocode (not full ROS2 code)
+class Arbiter:
+    def __init__(self):
+        self.sources = {
+           "human": {"priority":200, "last_cmd":None, "last_hb":0},
+           "central": {"priority":150, ...},
+           "rl": {"priority":100, ...},
+        }
+        self.current_source = None
+        self.hysteresis_ms = 200
+
+    def on_command(self, cmd:CommandMsg):
+        src = cmd.header.source_id
+        self.sources[src]["last_cmd"] = cmd
+        self.sources[src]["last_hb"] = now()
+        self.evaluate()
+
+    def evaluate(self):
+        # filter valid (not expired) sources
+        candidates = []
+        for s,info in self.sources.items():
+            cmd = info["last_cmd"]
+            if cmd and cmd.meta.expires_at > now():
+                candidates.append((info["priority"], cmd.header.timestamp, s, cmd))
+        if not candidates:
+            # no valid commands -> set current_source = None (hover/safe)
+            self.current_source = None
+            publish_safe_hold()
+            return
+        # sort by priority desc then timestamp desc
+        candidates.sort(key=lambda x:(-x[0], -x[1]))
+        chosen = candidates[0][2]
+        # hysteresis: 如果当前source不同，只有当新的优先级高或已过抑制时间才切换
+        if self.current_source != chosen:
+            if self.should_switch(chosen):
+                self.current_source = chosen
+                publish_authoritative(self.sources[chosen]["last_cmd"])
+        else:
+            # refresh current command
+            publish_authoritative(self.sources[chosen]["last_cmd"])
+
+
+publish_authoritative() 会把仲裁后的 CommandMsg 发布到 "/swarm/authoritative_cmd" 主题，Synchronizer/Adapters 订阅并执行转发。
+
+4. Synchronizer：把仲裁命令同步到各端
+
+职责：
+
+接受 authoritative 命令，把它转换为每个平台可接受的控制指令（Adapter）。
+
+保证指令在时间轴上平滑（插值 / 时间对齐）。
+
+状态回环：接收各端执行结果/位置并把实际状态发送回 Arbiter（用于判断同步偏差）。
+
+示例步骤：
+
+Arbiter 发布 authoritative CommandMsg 并包含 timestamp（执行起始时刻）。
+
+Synchronizer 收到后，若目标是 trajectory（含未来时间点），则：
+
+给 AirSim 下发 airsim.moveOnPath(...)（或对应API）
+
+给 PX4 下发 trajectory setpoints（mavros/setpoint_...）
+
+给 RL 平台（如果需要）发送 acknowledgement / 用于展示
+
+若命令为实时 velocity，则同步以固定频率转发（e.g. 20Hz）。
+
+注意：AirSim 与真实PX4 在控制接口/时序上差异较大，推荐统一为“时间标记的轨迹点（time-stamped setpoints）”，各 Adapter 在收到后负责将轨迹点转换为本地 API 并在指定时间执行。
+
+5. Adapter（协议/平台桥接）设计（示例）
+
+每个 Adapter 的职责相同：双向转换，暴露两套接口：
+
+入站（从平台 -> 转成统一 CommandMsg 并发给 Arbiter）
+
+出站（订阅 authoritative 的 CommandMsg 并转发到平台）
+
+示例：PX4 Adapter（基于 MAVROS）
+
+订阅：/mavros/local_position/pose（状态）
+
+接收遥控/地面站命令 -> 转成 CommandMsg（source_id="human"）
+
+订阅 /swarm/authoritative_cmd，把 setpoint 转为 mavros/setpoint_position/local 或 offboard 格式
+
+示例：AirSim Adapter
+
+AirSim 提供 Python API moveOnPath, moveByVelocity 等
+
+把 authoritative 转为 AirSim 对应 API（确保时间同步）
+
+示例：RL Adapter
+
+RL 平台若已有展示界面，做一个轻量的 REST 或 ROS 接口：
+
+RL -> 发布 /rl/cmd（source_id="rl"）
+
+RL 订阅 /swarm/authoritative_state 用于显示
+
+6. 时间同步与时序问题
+
+必须确保全体机器的时间对齐（因为消息用 timestamp 对齐）：
+
+实际部署：在局域网内用 PTP (Precision Time Protocol) 或至少 NTP。
+
+仿真端（AirSim）与主机应同钟或提供统一时间基（AirSim Python API 的时间戳要映射为 UNIX epoch）。
+
+轨迹点用绝对时间（epoch）或者相对 offset + arbiter publish time；推荐使用 epoch。
+
+7. 容错 / 安全策略
+
+所有命令带 expires_at，过期即丢弃。
+
+心跳机制：若某 source 连续 N 次无心跳/状态上报 -> 视为失联 -> 仲裁器剔除。
+
+若仲裁器失效：定义本地 fallback（PX4 保持 hover / AirSim 停止）；
+
+人类控制总能 preempt（紧急停止开关必须被映射成超高优先级命令）。
+
+9. 同步示例场景（完整流程）
+
+场景：同时存在三条命令（RL: 搜索路径，Central: 下达新目标，人类未操作）
+
+各 Adapter 将本地命令转为 CommandMsg 发到 /source/<id>/cmd。
+
+Arbiter 收到三路命令 -> 评估优先级 -> 选择 Central（优先级高于 RL）。
+
+Arbiter 发布 authoritative 到 /swarm/authoritative_cmd（含 trajectory/timebase）。
+
+Synchronizer/Adapters 订阅到 authoritative，将命令下发各自平台的 API（AirSim、PX4、RL 显示）。
+
+若人类开始操控（human 命令到达，priority=200），Arbiter 立即 preempt -> 发布 human 的 authoritative -> 同步发到 AirSim 与 RL（so 模拟和展示都跟随 human）。
+
+10. 开发/测试推荐路线（分阶段）
+
+单机仿真阶段
+
+在同一台机上运行 AirSim + RL 模拟数据 + 一个仿真 PX4（SITL）。
+
+使用 ROS2 topic 做所有通信，实现仲裁和转发。
+
+分布式仿真到真实混合
+
+部署 PX4 真机，PX4 Adapter 用 mavros 连接真实飞控；AirSim 仍作为中心算力模拟端。
+
+做时钟同步（NTP/PTP）。
+
+鲁棒性测试
+
+注入延迟、丢包、source 突然下线等场景，观察仲裁与回退。
+
+添加安全 overrides（例如 emergency_stop topic，优先级最高）。
+
+11. 额外建议（工程细节）
+
+消息队列持久化：只保留短期内有效的命令（use TTL）。
+
+日志与回放：记录 authoritative 流，便于重放调试（rosbag）。
+
+界面：在 RL 展示界面加入 current authoritative 源与延迟显示，便于调试。
+
+性能：仲裁器和同步器应运行在低延迟主机（边缘算力节点），并尽量保持控制命令频率（20~50Hz）稳定。
+
+12. PX4 接口信号和你的项目关系
+
+结合你的三种信号源：
+
+来源	推荐接口	特点
+RL 决策平台	/mavros/setpoint_velocity/cmd_vel	输出连续动作（速度）
+中央算力 (AirSim)	/mavros/setpoint_position/local 或 /mavros/setpoint_trajectory/local	输出全局目标或轨迹
+人类控制	RC 信号 → PX4 本地 MANUAL 模式	抢占优先权最高

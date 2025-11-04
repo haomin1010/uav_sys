@@ -1,0 +1,64 @@
+# Gazebo多机仿真配置
+
+# 无人机配置
+uavs:
+  - id: 1
+    name: "uav1"
+    model: "iris"
+    spawn_position:  # NED坐标系
+      x: 0.0      # North
+      y: 0.0      # East  
+      z: 0.0      # Down（地面）
+      yaw: 0.0
+    mavlink_udp_port: 14540
+    mavlink_tcp_port: 4560
+    
+  - id: 2
+    name: "uav2"
+    model: "iris"
+    spawn_position:
+      x: 0.0
+      y: -5.0   # 右边5米
+      z: 0.0
+      yaw: 0.0
+    mavlink_udp_port: 14541
+    mavlink_tcp_port: 4561
+    
+  - id: 3
+    name: "uav3"
+    model: "iris"
+    spawn_position:
+      x: 0.0
+      y: 5.0    # 左边5米
+      z: 0.0
+      yaw: 0.0
+    mavlink_udp_port: 14542
+    mavlink_tcp_port: 4562
+
+# Gazebo设置
+gazebo:
+  world: "empty"           # 世界文件名
+  gui: true                # 是否显示GUI
+  verbose: false           # 详细日志
+  physics_engine: "ode"    # 物理引擎
+
+# PX4设置
+px4:
+  autostart: 4001          # 机型(iris)
+  enable_lockstep: true    # 时钟锁步（仿真）
+  
+# MAVROS设置
+mavros:
+  fcu_protocol: "v2.0"
+  connection_timeout: 30.0
+  system_id: 1
+  component_id: 1
+
+# 编队设置（与系统配置对应）
+formation:
+  leader: "uav1"
+  offsets:  # NED坐标系，相对长机
+    uav1: {x: 0.0, y: 0.0, z: 0.0}
+    uav2: {x: 0.0, y: -5.0, z: 0.0}
+    uav3: {x: 0.0, y: 5.0, z: 0.0}
+
