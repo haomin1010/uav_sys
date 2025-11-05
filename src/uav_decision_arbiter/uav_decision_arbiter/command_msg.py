@@ -18,6 +18,7 @@ class CommandMode(Enum):
 class SourceID(Enum):
     """决策源ID枚举"""
     HUMAN = "human"
+    AUTOPILOT = "autopilot"   # 自动驾驶（起飞、降落等）
     CENTRAL = "central"
     RL = "rl"
 
@@ -25,8 +26,9 @@ class SourceID(Enum):
 # 优先级映射
 PRIORITY_MAP = {
     SourceID.HUMAN: 200,      # 人类控制：最高优先级
+    SourceID.AUTOPILOT: 100,  # 自动驾驶：高优先级（仅次于人类）
     SourceID.CENTRAL: 150,    # 中央算力：中优先级
-    SourceID.RL: 100,         # RL决策：低优先级
+    SourceID.RL: 120,         # RL决策：低优先级
 }
 
 

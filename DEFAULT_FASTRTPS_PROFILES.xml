@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<profiles>
+  <participant profile_name="default_participant_profile" is_default_profile="true">
+    <rtps>
+      <name>ros2_default_participant</name>
+    </rtps>
+  </participant>
+</profiles>

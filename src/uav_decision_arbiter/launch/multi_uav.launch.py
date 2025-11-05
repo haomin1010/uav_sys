@@ -133,11 +133,11 @@ def generate_launch_description():
                 {'use_sim_time': LaunchConfiguration('use_sim_time')}
             ],
             remappings=[
-                # MAVROS话题（假设每架PX4在独立命名空间）
-                ('/mavros/local_position/pose', f'/{uav_id}/mavros/local_position/pose'),
-                ('/mavros/local_position/velocity_local', f'/{uav_id}/mavros/local_position/velocity_local'),
-                ('/mavros/setpoint_position/local', f'/{uav_id}/mavros/setpoint_position/local'),
-                ('/mavros/setpoint_velocity/cmd_vel', f'/{uav_id}/mavros/setpoint_velocity/cmd_vel'),
+                # MAVROS话题（在Gazebo多机仿真中，话题直接在uav命名空间下）
+                ('/mavros/local_position/pose', f'/{uav_id}/local_position/pose'),
+                ('/mavros/local_position/velocity_local', f'/{uav_id}/local_position/velocity_local'),
+                ('/mavros/setpoint_position/local', f'/{uav_id}/setpoint_position/local'),
+                ('/mavros/setpoint_velocity/cmd_vel', f'/{uav_id}/setpoint_velocity/cmd_vel'),
             ]
         )
         nodes.append(px4_adapter)

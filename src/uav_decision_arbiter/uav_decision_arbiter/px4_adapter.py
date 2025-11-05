@@ -95,12 +95,21 @@ class PX4Adapter(Node):
     
     def setup_mavros(self):
         """设置MAVROS相关的订阅和发布"""
+        from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+        
+        # MAVROS使用BEST_EFFORT策略，需要匹配
+        mavros_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=10
+        )
+        
         # 订阅当前位置
         self.sub_mavros_position = self.create_subscription(
             PoseStamped,
             '/mavros/local_position/pose',
             self.on_mavros_position,
-            10
+            mavros_qos
         )
         
         # 订阅当前速度
@@ -108,7 +117,7 @@ class PX4Adapter(Node):
             TwistStamped,
             '/mavros/local_position/velocity_local',
             self.on_mavros_velocity,
-            10
+            mavros_qos
         )
         
         # 订阅RC输入（检测人类控制）

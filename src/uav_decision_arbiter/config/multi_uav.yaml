@@ -22,18 +22,8 @@ formation_sync:
     sync_on_startup: true
     startup_delay: 3.0                      # 等待所有PX4数据
     
-    # 编队标准队形（NED坐标系，相对于长机）
-    formation_offsets:
-      uav1: {x: 0.0, y: 0.0, z: 0.0}       # 长机位于编队中心
-      uav2: {x: 0.0, y: -5.0, z: 0.0}      # 右翼5米（东边）
-      uav3: {x: 0.0, y: 5.0, z: 0.0}       # 左翼5米（西边）
-    
-    # AirSim中的生成位置（NED坐标系，全局）
-    # 这些是AirSim世界中无人机的初始spawn点
-    airsim_spawn_offsets:
-      uav1: {x: 0.0, y: 0.0, z: 0.0}       # AirSim世界原点
-      uav2: {x: 0.0, y: -10.0, z: 0.0}     # 东边10米
-      uav3: {x: 0.0, y: 10.0, z: 0.0}      # 西边10米
+    # 注意：编队偏移量和AirSim生成位置在代码中硬编码
+    # 因为ROS2参数系统不支持嵌套字典结构
 
 # UAV1的适配器配置
 uav1_rl_adapter:
@@ -42,6 +32,8 @@ uav1_rl_adapter:
     rl_input_format: "velocity"
     sync_initial_position: true
     uav_id: "uav1"
+    sync_gazebo_state: true           # 同步Gazebo状态
+    wait_for_start_command: true      # 等待启动指令
 
 uav1_airsim_adapter:
   ros__parameters:
@@ -67,6 +59,8 @@ uav2_rl_adapter:
     rl_input_format: "velocity"
     sync_initial_position: true
     uav_id: "uav2"
+    sync_gazebo_state: true
+    wait_for_start_command: true
 
 uav2_airsim_adapter:
   ros__parameters:
@@ -92,6 +86,8 @@ uav3_rl_adapter:
     rl_input_format: "velocity"
     sync_initial_position: true
     uav_id: "uav3"
+    sync_gazebo_state: true
+    wait_for_start_command: true
 
 uav3_airsim_adapter:
   ros__parameters:

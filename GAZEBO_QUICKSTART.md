@@ -53,6 +53,7 @@ make px4_sitl_default gazebo
 
 # 4. 测试
 make px4_sitl gazebo  # 应该看到Gazebo和一架无人机
+make px4_sitl gazebo-classic  # gpt推荐
 
 # Ctrl+C停止测试
 ```

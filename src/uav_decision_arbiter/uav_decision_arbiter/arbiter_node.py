@@ -41,6 +41,12 @@ class ArbiterNode(Node):
                         "last_hb": 0.0,
                         "enabled": True
                     },
+                    SourceID.AUTOPILOT.value: {
+                        "priority": PRIORITY_MAP[SourceID.AUTOPILOT],
+                        "last_cmd": None,
+                        "last_hb": 0.0,
+                        "enabled": True
+                    },
                     SourceID.CENTRAL.value: {
                         "priority": PRIORITY_MAP[SourceID.CENTRAL],
                         "last_cmd": None,
@@ -63,6 +69,13 @@ class ArbiterNode(Node):
             String,
             '/uav/source/human/cmd',
             lambda msg: self.on_command(msg, SourceID.HUMAN.value),
+            10
+        )
+        
+        self.sub_autopilot = self.create_subscription(
+            String,
+            '/uav/source/autopilot/cmd',
+            lambda msg: self.on_command(msg, SourceID.AUTOPILOT.value),
             10
         )
         
@@ -101,6 +114,7 @@ class ArbiterNode(Node):
         self.get_logger().info(f'模式: {"集中仲裁" if self.centralized_mode else "单机"}')
         self.get_logger().info(f'管理无人机: {self.uav_ids}')
         self.get_logger().info(f'优先级设置: 人类={PRIORITY_MAP[SourceID.HUMAN]}, '
+                             f'自动驾驶={PRIORITY_MAP[SourceID.AUTOPILOT]}, '
                              f'中央算力={PRIORITY_MAP[SourceID.CENTRAL]}, '
                              f'RL={PRIORITY_MAP[SourceID.RL]}')
     

@@ -51,6 +51,13 @@ else
     echo "⚠️  工作空间尚未编译，请运行: colcon build"
 fi
 
+# 禁用ROS2共享内存传输（避免RTPS_TRANSPORT_SHM警告）
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export FASTRTPS_DEFAULT_PROFILES_FILE=""
+export RMW_FASTRTPS_USE_QOS_FROM_XML=0
+# 使用UDP传输替代共享内存
+export FASTRTPS_BUILTIN_TRANSPORTS=UDPv4
+
 echo "========================================"
 echo "环境设置完成！"
 echo ""

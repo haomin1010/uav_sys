@@ -26,12 +26,21 @@ class RLAdapter(Node):
         self.declare_parameter('command_timeout', 0.5)  # 命令有效期（秒）
         self.declare_parameter('rl_input_format', 'velocity')  # RL输出格式：velocity/position
         self.declare_parameter('sync_initial_position', True)  # 是否同步初始位置
+        self.declare_parameter('uav_id', 'uav1')  # 绑定的无人机ID
+        self.declare_parameter('sync_gazebo_state', True)  # 是否同步Gazebo状态
+        self.declare_parameter('wait_for_start_command', True)  # 是否等待明确的启动指令
         
         self.command_timeout = self.get_parameter('command_timeout').value
         self.rl_input_format = self.get_parameter('rl_input_format').value
         self.sync_initial_position = self.get_parameter('sync_initial_position').value
+        self.uav_id = self.get_parameter('uav_id').value
+        self.sync_gazebo_state = self.get_parameter('sync_gazebo_state').value
+        self.wait_for_start_command = self.get_parameter('wait_for_start_command').value
         
         self.seq = 0  # 命令序列号
+        self.rl_enabled = not self.wait_for_start_command  # RL是否启用
+        self.gazebo_state = None  # Gazebo状态
+        self.last_rl_decision = None  # 最后的RL决策
         
         # 订阅RL平台的决策输出
         # RL平台应该发布到这个话题，格式可以是自定义的
@@ -88,25 +97,168 @@ class RLAdapter(Node):
                 10
             )
         
+        # 订阅Gazebo状态（从PX4适配器获取）
+        if self.sync_gazebo_state:
+            from geometry_msgs.msg import PoseStamped, TwistStamped
+            from mavros_msgs.msg import State
+            from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
+            
+            # MAVROS QoS设置
+            mavros_qos = QoSProfile(
+                reliability=QoSReliabilityPolicy.BEST_EFFORT,
+                history=QoSHistoryPolicy.KEEP_LAST,
+                depth=10
+            )
+            
+            # State话题的QoS设置（MAVROS使用TRANSIENT_LOCAL）
+            state_qos = QoSProfile(
+                reliability=QoSReliabilityPolicy.RELIABLE,
+                history=QoSHistoryPolicy.KEEP_LAST,
+                durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+                depth=10
+            )
+            
+            # 订阅MAVROS位置和速度
+            self.sub_gazebo_pose = self.create_subscription(
+                PoseStamped,
+                f'/{self.uav_id}/local_position/pose',
+                self.on_gazebo_pose,
+                mavros_qos
+            )
+            
+            self.sub_gazebo_velocity = self.create_subscription(
+                TwistStamped,
+                f'/{self.uav_id}/local_position/velocity_local',
+                self.on_gazebo_velocity,
+                mavros_qos
+            )
+            
+            # 订阅无人机状态（使用正确的消息类型）
+            self.sub_gazebo_state_msg = self.create_subscription(
+                State,
+                f'/{self.uav_id}/state',
+                self.on_gazebo_state_msg,
+                state_qos
+            )
+        
+        # 订阅RL启动/停止命令
+        self.sub_rl_control = self.create_subscription(
+            String,
+            '/rl/control_command',
+            self.on_rl_control,
+            10
+        )
+        
+        # 发布Gazebo状态给RL平台
+        self.pub_gazebo_state_to_rl = self.create_publisher(
+            String,
+            f'/{self.uav_id}/rl/gazebo_state',
+            10
+        )
+        
         # 定时发布心跳状态
         self.timer = self.create_timer(0.1, self.timer_callback)  # 10Hz
         
         self.last_rl_state = None
         self.initial_position = None
+        self.gazebo_pose = None
+        self.gazebo_velocity = None
+        self.gazebo_state_msg = None
         
         self.get_logger().info('RL适配器节点已启动')
+        self.get_logger().info(f'绑定无人机: {self.uav_id}')
         self.get_logger().info(f'RL输入格式: {self.rl_input_format}')
+        self.get_logger().info(f'RL状态: {"等待启动指令" if self.wait_for_start_command else "已启用"}')
     
     def now(self) -> float:
         """获取当前时间戳"""
         return time.time()
     
+    def on_gazebo_pose(self, msg):
+        """接收Gazebo位置"""
+        self.gazebo_pose = {
+            'x': msg.pose.position.x,
+            'y': msg.pose.position.y,
+            'z': msg.pose.position.z,
+            'qw': msg.pose.orientation.w,
+            'qx': msg.pose.orientation.x,
+            'qy': msg.pose.orientation.y,
+            'qz': msg.pose.orientation.z
+        }
+        self.publish_gazebo_state_to_rl()
+    
+    def on_gazebo_velocity(self, msg):
+        """接收Gazebo速度"""
+        self.gazebo_velocity = {
+            'vx': msg.twist.linear.x,
+            'vy': msg.twist.linear.y,
+            'vz': msg.twist.linear.z,
+            'wx': msg.twist.angular.x,
+            'wy': msg.twist.angular.y,
+            'wz': msg.twist.angular.z
+        }
+        self.publish_gazebo_state_to_rl()
+    
+    def on_gazebo_state_msg(self, msg):
+        """接收Gazebo状态消息（armed, mode等）"""
+        # msg 是 mavros_msgs/msg/State 类型
+        self.gazebo_state_msg = {
+            'connected': msg.connected,
+            'armed': msg.armed,
+            'guided': msg.guided,
+            'mode': msg.mode,
+            'system_status': msg.system_status
+        }
+    
+    def on_rl_control(self, msg: String):
+        """接收RL控制命令（启动/停止）"""
+        try:
+            cmd = json.loads(msg.data)
+            if 'command' in cmd:
+                if cmd['command'] == 'start':
+                    self.rl_enabled = True
+                    self.get_logger().info('✓ RL决策已启动')
+                elif cmd['command'] == 'stop':
+                    self.rl_enabled = False
+                    self.get_logger().info('✗ RL决策已停止')
+                elif cmd['command'] == 'toggle':
+                    self.rl_enabled = not self.rl_enabled
+                    status = '启动' if self.rl_enabled else '停止'
+                    self.get_logger().info(f'RL决策切换为: {status}')
+        except Exception as e:
+            self.get_logger().error(f'解析RL控制命令失败: {e}')
+    
+    def publish_gazebo_state_to_rl(self):
+        """发布Gazebo状态给RL平台"""
+        if self.gazebo_pose is None or self.gazebo_velocity is None:
+            return
+        
+        state = {
+            'timestamp': self.now(),
+            'uav_id': self.uav_id,
+            'pose': self.gazebo_pose,
+            'velocity': self.gazebo_velocity,
+            'state': self.gazebo_state_msg,
+            'rl_enabled': self.rl_enabled
+        }
+        
+        msg = String()
+        msg.data = json.dumps(state)
+        self.pub_gazebo_state_to_rl.publish(msg)
+    
     def on_rl_decision(self, msg: String):
         """接收RL决策输出"""
+        # 检查RL是否启用
+        if not self.rl_enabled:
+            # 保存但不发送
+            self.last_rl_decision = msg.data
+            return
+        
         try:
             # 解析RL平台的输出
             # 假设RL输出格式为: {"action": [vx, vy, vz, yaw_rate]} 或 {"position": [x, y, z, yaw]}
             rl_data = json.loads(msg.data)
+            self.last_rl_decision = msg.data
             
             current_time = self.now()
             self.seq += 1
